@@ -4,6 +4,7 @@ import ErrorHandler from "./error.js";
 import jwt from "jsonwebtoken";
 
 
+
 // Middleware to authenticate dashboard users
 export const isAdminAuthenticated = catchAsyncErrors(
   async (req, res, next) => {
