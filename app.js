@@ -15,7 +15,7 @@ config({ path: "./config/config.env" });
 
 app.use(
   cors({
-    origin: '*', // This is a occer the error in gat not sharching a path root in config.env
+    origin: [process.env.FRONTEND_URL_ONE, process.env.FRONTEND_URL_TWO], // This is a occer the error in gat not sharching a path root in config.env
     method: ["GET", "POST", "DELETE", "PUT"],
     credentials: true,
      
