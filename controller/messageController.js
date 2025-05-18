@@ -14,10 +14,72 @@ export const sendMessage = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// get all messages with pagination
 export const getAllMessages = catchAsyncErrors(async (req, res, next) => {
-  const messages = await Message.find();
+  const { page = 1, limit = 10 } = req.query; // Default pagination values
+
+  const [messages, totalCount] = await Promise.all([
+    Message.find()
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit)),
+    Message.countDocuments()
+  ]);
+
   res.status(200).json({
     success: true,
+    count: messages.length, 
+    totalCount,            
+    totalPages: Math.ceil(totalCount / limit),
+    currentPage: Number(page),
     messages,
+  });
+});
+
+export const DeleteMessage = catchAsyncErrors(async (req, res, next) => {
+  const { id } = req.params;
+
+  const message = await Message.findOne({
+    _id: id,
+  });
+
+  if (!message) {
+    return next(new ErrorHandler("Message not found or unauthorized", 404));
+  }
+
+  const deletionResult = await Message.deleteOne({ _id: id });
+
+  if (deletionResult.deletedCount === 0) {
+    return next(new ErrorHandler("Message could not be deleted", 500));
+  }
+  res.status(200).json({
+    success: true,
+    message: "Message deleted successfully",
+    data: {
+      id,
+      deletedAt: new Date()
+    }
+  });
+});
+// get message and send notification 
+export const getMessage = catchAsyncErrors(async (req, res, next) => {
+  const { id } = req.params;
+  const message = await Message.findById(id);
+  if (!message) {
+    return next(new ErrorHandler("Message Not Found!", 404));
+  }
+  res.status(200).json({
+    success: true,
+    message: "Message Found!",
+    messageData: message,
+  });
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const subject = "New Message from " + message.firstName;
+  const text = `You have a new message from ${message.firstName} ${message.lastName}.\n\nEmail: ${message.email}\nPhone: ${message.phone}\nMessage: ${message.message}`;
+  await sendEmail(adminEmail, subject, text);
+  res.status(200).json({
+    success: true,
+    message: "Message Found!",
+    messageData: message,
   });
 });

@@ -68,6 +68,7 @@ dob: {
   doctorId: {
     type: mongoose.Schema.ObjectId,
     required: [true, "Doctor Id Is Invalid!"],
+     ref: 'User'
   },
   patientId: {
     type: mongoose.Schema.ObjectId,
@@ -76,9 +77,13 @@ dob: {
   },
   status: {
     type: String,
-    enum: ["Pending", "Accepted", "Rejected"],
+    enum: ["Pending", "Accepted", "Rejected","Completed"],
     default: "Pending",
   },
+  fees:{
+    type: Number,
+    default:200
+  }
 });
 
 export const Appointment = mongoose.model("Appointment", appointmentSchema);

@@ -58,6 +58,10 @@ const userSchema = new mongoose.Schema({
     public_id: String,
     url: String,
   },
+  createdBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User'
+},
 });
 
 userSchema.pre("save", async function (next) {
