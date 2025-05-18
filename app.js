@@ -22,7 +22,7 @@ initializeWebSocket(httpServer);
 
 app.use(
   cors({
-    origin: [process.env.FRONTEND_URL_ONE, process.env.FRONTEND_URL_TWO, process.env.FRONTEND_URL_ONE1, process.env.FRONTEND_URL_TWO2],
+    origin: [process.env.FRONTEND_URL_ONE, process.env.LOCAL_FRONTEND_URL_ONE, process.env.LOCAL_FRONTEND_URL_TWO,process.env.FRONTEND_URL_TWO, process.env.FRONTEND_URL_ONE1, process.env.FRONTEND_URL_TWO2],
     methods: ["GET", "POST", "DELETE", "PUT"],
     credentials: true,
   })
