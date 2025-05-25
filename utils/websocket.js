@@ -12,8 +12,10 @@ export const initializeWebSocket = (httpServer) => {
         process.env.FRONTEND_URL_TWO2
       ],
       methods: ["GET", "POST", "PUT", "DELETE"],
-      credentials: true
-    }
+      credentials: true,
+       allowedHeaders: ["Content-Type", "Authorization"]
+    },
+     transports: ['websocket', 'polling'] // Important for compatibility
   });
 
   // Active call timers storage

@@ -18,7 +18,7 @@ router.post('/schedule',
 
 // Get call details
 router.get('/:roomId',  
-    isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
+   // isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
   getCallDetails
 );
 

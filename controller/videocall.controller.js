@@ -106,7 +106,7 @@ export const getCallDetails = async (req, res) => {
 };
 
 // Join a video call
-export const joinCall = async (req, res) => {
+export const  joinCall = async (req, res) => {
   try {
     const { roomId, userId } = req.body;
     const call = await VideoCall.findOne({ roomId });
