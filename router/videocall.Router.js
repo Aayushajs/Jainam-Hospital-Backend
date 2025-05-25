@@ -24,7 +24,7 @@ router.get('/:roomId',
 
 // Join a call
 router.post('/join',
-  isPatientAuthenticated|| isDoctorAuthenticated, 
+ // isPatientAuthenticated|| isDoctorAuthenticated, 
   joinCall
 );
 
