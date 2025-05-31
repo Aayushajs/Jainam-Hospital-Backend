@@ -413,6 +413,16 @@ export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   if (!admin || admin.role !== "Admin") {
     return next(new ErrorHandler("Admin not found!", 404));
   }
+if (email && email !== admin.email) {
+    const emailExists = await User.findOne({ 
+      email: email,
+      _id: { $ne: req.user._id } // Exclude the current admin
+    });
+    
+    if (emailExists) {
+      return next(new ErrorHandler("Email is already registered by another user!", 400));
+    }
+  }
 
   admin.firstName = firstName || admin.firstName;
   admin.lastName = lastName || admin.lastName;
@@ -421,6 +431,7 @@ export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   admin.nic = nic || admin.nic;
   admin.dob = dob || admin.dob;
   admin.gender = gender || admin.gender;
+
 
   await admin.save();
 
@@ -437,6 +448,16 @@ export const updatePatientProfile = catchAsyncErrors(async (req, res, next) => {
   const patient = await User.findById(req.user._id);
   if (!patient || patient.role !== "Patient") {
     return next(new ErrorHandler("Patient not found!", 404));
+  }
+    if (email && email !== patient.email) {
+    const emailExists = await User.findOne({ 
+      email: email,
+      _id: { $ne: req.user._id } // Exclude the current patient
+    });
+    
+    if (emailExists) {
+      return next(new ErrorHandler("Email is already registered by another user!", 400));
+    }
   }
 
   patient.firstName = firstName || patient.firstName;
@@ -471,6 +492,17 @@ export const updateDoctorProfile = catchAsyncErrors(async (req, res, next) => {
   const doctor = await User.findById(req.user._id);
   if (!doctor || doctor.role !== "Doctor") {
     return next(new ErrorHandler("Doctor not found!", 404));
+  }
+
+    if (email && email !== doctor.email) {
+    const emailExists = await User.findOne({ 
+      email: email,
+      _id: { $ne: req.user._id } // Exclude the current doctor
+    });
+    
+    if (emailExists) {
+      return next(new ErrorHandler("Email is already registered by another user!", 400));
+    }
   }
 
   if (req.files && req.files.docAvatar) {
