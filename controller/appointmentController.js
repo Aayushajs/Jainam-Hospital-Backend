@@ -112,10 +112,11 @@ export const updateAppointmentStatus = catchAsyncErrors(async (req, res, next) =
   
   if (status) {
  
-    const validStatuses = ["Pending", "Accepted", "Rejected"];
+    const validStatuses = ["Pending", "Accepted", "Rejected", "Completed"];
     if (!validStatuses.includes(status)) {
       return next(new ErrorHandler("Invalid appointment status!", 400));
     }
+    
 
     // Special handling for Accepted status
     if (status === "Accepted" && !appointment.doctorId) {
