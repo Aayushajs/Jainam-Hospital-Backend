@@ -347,17 +347,21 @@ export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
 export const deleteDoctor = catchAsyncErrors(async (req, res, next) => {
   const { id } = req.params;
 
+  // Find the doctor and check if they were created by the current admin
   const doctor = await User.findOne({
     _id: id,
     role: "Doctor",
+    createdBy: req.user._id  // Only find doctors created by this admin
   });
 
   if (!doctor) {
-    return next(new ErrorHandler("Doctor not found", 404));
+    return next(new ErrorHandler("Doctor not found or you don't have permission to delete this doctor", 404));
   }
 
+  // Delete the doctor
   await User.deleteOne({ _id: id });
 
+  // Delete all appointments associated with this doctor
   await Appointment.deleteMany({ doctorId: id });
 
   res.status(200).json({

@@ -62,7 +62,15 @@ const userSchema = new mongoose.Schema({
   type: mongoose.Schema.Types.ObjectId,
   ref: 'User'
 },
-});
+date:{
+  type: Date,
+  default: Date.now
+},
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+}, { timestamps: true });
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
