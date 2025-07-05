@@ -158,11 +158,15 @@ export const getDescriptionsByFilters = catchAsyncErrors(async (req, res, next) 
   const descriptions = await Description.find(filter)
     .sort({ date: -1 })
     .populate('patientId', 'firstName lastName')
-    .populate('doctorId', 'firstName lastName doctorDepartment');
+    .populate('doctorId', 'firstName lastName doctorDepartment')
+    // descripition id in response
+
+    
 
   res.status(200).json({
     success: true,
     count: descriptions.length,
+   
     descriptions
   });
 });

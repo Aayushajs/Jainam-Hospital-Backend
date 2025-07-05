@@ -46,7 +46,7 @@ router.get(
 // Generate PDF (Patient, Doctor or Admin)
 router.get(
   "/:id/pdf",
-  isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
+ // isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
   generateDescriptionPDF
 );
 
