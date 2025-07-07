@@ -91,6 +91,47 @@ export const getAllAppointments = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// get appointment by dr. id 
+export const getMyAppointments = catchAsyncErrors(async (req, res, next) => {
+  const { page = 1, limit = 10, search, status, date } = req.query;
+  
+  
+  const filter = { doctorId: req.user._id }; 
+  
+ 
+  if (status) {
+    filter.status = status;
+  }
+  
+
+  if (date) {
+    filter.appointment_date = date; 
+  }
+  
+  
+  if (search) {
+    filter.$or = [
+      { firstName: { $regex: search, $options: 'i' } },
+      { lastName: { $regex: search, $options: 'i' } }
+    ];
+  }
+  
+  const appointments = await Appointment.find(filter)
+    .limit(limit * 1)
+    .skip((page - 1) * limit)
+    .sort({ appointment_date: 1 });
+  
+  const count = await Appointment.countDocuments(filter);
+  
+  res.status(200).json({
+    success: true,
+    appointments,
+    totalPages: Math.ceil(count / limit),
+    currentPage: page,
+    totalAppointments: count
+  });
+});
+
 // Update appointment status
 export const updateAppointmentStatus = catchAsyncErrors(async (req, res, next) => {
   const { id } = req.params;

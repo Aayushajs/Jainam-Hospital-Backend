@@ -354,6 +354,83 @@ export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
   }
 });
 
+// get patient details by only dr.
+export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, next) => {
+  try {
+    const doctorId = req.user._id; // Assuming the doctor is logged in and their ID is in req.user
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Get patients who have appointments with this doctor
+    const aggregationPipeline = [
+      {
+        $match: { 
+          role: "Patient",
+          // Only patients who have appointments with this doctor
+          _id: { 
+            $in: await Appointment.distinct("patientId", { doctorId: doctorId }) 
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "appointments",
+          let: { patientId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$patientId", "$$patientId"] },
+                    { $eq: ["$doctorId", doctorId] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: "appointmentsWithDoctor"
+        }
+      },
+      {
+        $addFields: {
+          appointmentCount: { $size: "$appointmentsWithDoctor" },
+        },
+      },
+      {
+        $project: {
+          password: 0,
+          __v: 0,
+          appointmentsWithDoctor: 0, // Remove the appointments array after counting
+        },
+      },
+      { $skip: skip },
+      { $limit: limit }
+    ];
+
+    // Get both paginated results and total count
+    const [patients, totalCount] = await Promise.all([
+      User.aggregate(aggregationPipeline),
+      User.countDocuments({ 
+        role: "Patient",
+        _id: { $in: await Appointment.distinct("patientId", { doctorId: doctorId }) }
+      })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: patients.length,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+      patients,
+    });
+  } catch (error) {
+    return next(new ErrorHandler("Error fetching patients with appointments", 500));
+  }
+});
+
+
 // delete doctor
 export const deleteDoctor = catchAsyncErrors(async (req, res, next) => {
   const { id } = req.params;

@@ -15,6 +15,7 @@ import {
   logoutAdmin,
   logoutPatient,
   patientRegister,
+  getPatientsWithAppointments,
 } from "../controller/userController.js";
 import {
   isAdminAuthenticated,
@@ -26,6 +27,7 @@ const router = express.Router();
 
 router.post("/patient/register", patientRegister);
 router.get("/getAllPatiens",isAdminAuthenticated,getAllPatients)
+router.get("/getPatientsWithAppointments", isDoctorAuthenticated, getPatientsWithAppointments); // for admin to get all patients
 router.post("/login", login);// for all admin, user and doctor
 router.post("/admin/addnew",  addNewAdmin);
 router.post("/doctor/addnew", isAdminAuthenticated, addNewDoctor);
