@@ -63,6 +63,20 @@ export const isPatientAuthenticated = catchAsyncErrors(
   }
 );
 
+// Middleware to allow both admin and doctor
+export const isAdminOrDoctorAuthenticated = catchAsyncErrors(async (req, res, next) => {
+  let token = req.cookies.adminToken || req.cookies.doctorToken;
+  if (!token) {
+    return next(new ErrorHandler("Admin or Doctor is not authenticated!", 400));
+  }
+  const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  req.user = await User.findById(decoded.id);
+  if (req.user.role !== "Admin" && req.user.role !== "Doctor") {
+    return next(new ErrorHandler(`${req.user.role} not authorized for this resource!`, 403));
+  }
+  next();
+});
+
 export const isAuthorized = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
