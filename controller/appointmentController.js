@@ -372,3 +372,30 @@ export const startAppointmentAlert = catchAsyncErrors(async (req, res, next) => 
     message: "Alert timer started"
   });
 });
+
+
+// Get appointment by ID (admin or doctor)
+export const getAppointmentById = catchAsyncErrors(async (req, res, next) => {
+  const { id } = req.params;
+  const appointment = await Appointment.findById(id);
+  if (!appointment) {
+    return next(new ErrorHandler("Appointment not found!", 404));
+  }
+
+  // Admin can access any appointment
+  if (req.user.role === "Admin") {
+    return res.status(200).json({ success: true, appointment });
+  }
+
+  // Doctor can only access appointments assigned to them
+  if (req.user.role === "Doctor") {
+    if (appointment.doctorId && appointment.doctorId.toString() === req.user._id.toString()) {
+      return res.status(200).json({ success: true, appointment });
+    } else {
+      return next(new ErrorHandler("Unauthorized: You can only access your own appointments!", 403));
+    }
+  }
+
+  // Other roles not allowed
+  return next(new ErrorHandler("Unauthorized", 403));
+});

@@ -8,6 +8,7 @@ import {
   getPatientAppointments,
   startAppointmentAlert, 
   getMyAppointments,
+  getAppointmentById,
 } from "../controller/appointmentController.js";
 
 import {
@@ -24,6 +25,7 @@ router.get("/getall", isAdminAuthenticated, getAllAppointments);
 router.get("/getMyAppointments", isDoctorAuthenticated, getMyAppointments);
 router.get("/getfiltered", isAdminAuthenticated, getFilteredAppointments);
 router.put("/update/:id", isAdminOrDoctorAuthenticated, updateAppointmentStatus);
+router.get("/:id", isAdminOrDoctorAuthenticated, getAppointmentById);
 router.post("/appointment/alert", startAppointmentAlert);
 router.delete("/delete/:id", isAdminAuthenticated, deleteAppointment);
 router.get("/getpatientappointments/:patientId", isPatientAuthenticated,getPatientAppointments
