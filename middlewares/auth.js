@@ -89,3 +89,21 @@ export const isAuthorized = (...roles) => {
     next();
   };
 };
+
+// Middleware to allow either Doctor or Patient
+export const isDoctorOrPatientAuthenticated = catchAsyncErrors(async (req, res, next) => {
+  // prefer doctorToken if present, otherwise patientToken
+  const token = req.cookies.doctorToken || req.cookies.patientToken;
+  if (!token) {
+    return next(new ErrorHandler("Doctor or Patient is not authenticated!", 400));
+  }
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  req.user = await User.findById(decoded.id);
+
+  if (req.user.role !== "Doctor" && req.user.role !== "Patient") {
+    return next(new ErrorHandler(`${req.user.role} not authorized for this resource!`, 403));
+  }
+
+  next();
+});

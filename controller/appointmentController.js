@@ -322,7 +322,8 @@ export const getPatientAppointments = catchAsyncErrors(async (req, res, next) =>
   const enhancedAppointments = await Promise.all(
     appointments.map(async (appointment) => {
  
-      if (status && appointment.status !== status) return null;
+      if (status && appointment.status !== status) 
+        {return null};
       
       const appointmentObj = appointment.toObject();
       
