@@ -5,6 +5,9 @@ import { generateToken } from "../utils/jwtToken.js";
 import cloudinary from "cloudinary";
 import { Appointment } from "../models/appointmentSchema.js";
 import LoginHistory from "../models/loginHistorySchema.js";
+import { generateOTP } from "../utils/otp.js";
+import { redis } from "../config/redis.js";
+import { sendEmail } from "../utils/mailer.js";
 
 // Get login history (admin only) with pagination and filters
 export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
