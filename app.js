@@ -15,7 +15,7 @@ import descriptionRouter from "./router/descriptionRouter.js";
 import chatRouter from "./router/chatRoutes.js";
 import videoCallRouter from "./router/videocall.Router.js";
 const app = express();
-config({ path: "./config/config.env" });
+config({ path: "./config/.env" });
 
 const httpServer = createServer(app);
 initializeWebSocket(httpServer);

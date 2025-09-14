@@ -4,6 +4,10 @@ import ErrorHandler from "../middlewares/error.js";
 import { generateToken } from "../utils/jwtToken.js";
 import cloudinary from "cloudinary";
 import { Appointment } from "../models/appointmentSchema.js";
+import { generateOTP } from "../utils/otp.js";
+import { redis } from "../config/redis.js";
+import { sendEmail } from "../utils/mailer.js";
+import bcrypt from "bcrypt";
 
 // petient section
 export const patientRegister = catchAsyncErrors(async (req, res, next) => {
@@ -45,30 +49,35 @@ export const patientRegister = catchAsyncErrors(async (req, res, next) => {
 export const login = catchAsyncErrors(async (req, res, next) => {
   const { email, password, confirmPassword, role } = req.body;
 
+  console.log("Login attempt:", { email, role, passwordProvided: !!password, confirmPasswordProvided: !!confirmPassword });
+  console.log("Request Body:", req.body);
+
 
   if (!email || !password || !confirmPassword || !role) {
     return next(new ErrorHandler("Please Fill Full Form!", 400));
   }
 
- 
+
   if (password !== confirmPassword) {
     return next(new ErrorHandler("Password & Confirm Password Do Not Match!", 400));
   }
 
-  
+
   const user = await User.findOne({ email }).select("+password");
+  console.log("User found:", user); 
 
   if (!user) {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
   }
 
-  
+
   if (role !== user.role) {
     return next(new ErrorHandler(`User Not Found With This Role!`, 400));
   }
 
-  
+
   const isPasswordMatch = await user.comparePassword(password);
+  console.log("Password match:", isPasswordMatch);
   if (!isPasswordMatch) {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
   }
@@ -365,11 +374,11 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
     // Get patients who have appointments with this doctor
     const aggregationPipeline = [
       {
-        $match: { 
+        $match: {
           role: "Patient",
           // Only patients who have appointments with this doctor
-          _id: { 
-            $in: await Appointment.distinct("patientId", { doctorId: doctorId }) 
+          _id: {
+            $in: await Appointment.distinct("patientId", { doctorId: doctorId })
           }
         }
       },
@@ -411,7 +420,7 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
     // Get both paginated results and total count
     const [patients, totalCount] = await Promise.all([
       User.aggregate(aggregationPipeline),
-      User.countDocuments({ 
+      User.countDocuments({
         role: "Patient",
         _id: { $in: await Appointment.distinct("patientId", { doctorId: doctorId }) }
       })
@@ -505,12 +514,12 @@ export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   if (!admin || admin.role !== "Admin") {
     return next(new ErrorHandler("Admin not found!", 404));
   }
-if (email && email !== admin.email) {
-    const emailExists = await User.findOne({ 
+  if (email && email !== admin.email) {
+    const emailExists = await User.findOne({
       email: email,
       _id: { $ne: req.user._id } // Exclude the current admin
     });
-    
+
     if (emailExists) {
       return next(new ErrorHandler("Email is already registered by another user!", 400));
     }
@@ -541,12 +550,12 @@ export const updatePatientProfile = catchAsyncErrors(async (req, res, next) => {
   if (!patient || patient.role !== "Patient") {
     return next(new ErrorHandler("Patient not found!", 404));
   }
-    if (email && email !== patient.email) {
-    const emailExists = await User.findOne({ 
+  if (email && email !== patient.email) {
+    const emailExists = await User.findOne({
       email: email,
       _id: { $ne: req.user._id } // Exclude the current patient
     });
-    
+
     if (emailExists) {
       return next(new ErrorHandler("Email is already registered by another user!", 400));
     }
@@ -586,12 +595,12 @@ export const updateDoctorProfile = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Doctor not found!", 404));
   }
 
-    if (email && email !== doctor.email) {
-    const emailExists = await User.findOne({ 
+  if (email && email !== doctor.email) {
+    const emailExists = await User.findOne({
       email: email,
       _id: { $ne: req.user._id } // Exclude the current doctor
     });
-    
+
     if (emailExists) {
       return next(new ErrorHandler("Email is already registered by another user!", 400));
     }
@@ -635,3 +644,101 @@ export const updateDoctorProfile = catchAsyncErrors(async (req, res, next) => {
     doctor,
   });
 });
+
+
+
+// ----------------------- yaha se aaryan ne kiya hai -----------------------
+// ----------------------- FROM hERE Code is done by AARYAN -----------------------
+// ----------------------- यहाँ से कोड आर्यन द्वारा किया गया है। -----------------------
+
+
+
+export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
+  try {
+    const { email, phone } = req.body;
+    console.log("Received forgot password request for:", { email, phone });
+
+    if (!email && !phone) {
+      return next(new ErrorHandler("Please Provide Email or Phone!", 400));
+    }
+
+    const userExists = email
+      ? await User.findOne({ email })
+      : await User.findOne({ phone });
+
+    console.log("User found:", userExists);
+    if (!userExists) {
+      return next(new ErrorHandler("User Not Found!", 404));
+    }
+
+    const otp = generateOTP();
+    console.log("Generated OTP:", otp); 
+    await redis.set(`otp:${userExists._id}`, otp, 'EX', 600);
+    if (email) {
+      console.log("Sending OTP to email:", email);
+      await sendEmail(email, otp);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "OTP Sent Successfully!",
+    });
+
+  } catch (error) {
+    return next(new ErrorHandler("Error occurred while processing request", 500));
+  }
+})
+
+export const resetPassword = catchAsyncErrors(async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    console.log("User ID from auth middleware:", userId);
+
+    const { otp, inputPassword } = req.body;
+
+    if (!userId || !otp) {
+      return next(new ErrorHandler("Please Provide UserId & OTP!", 400));
+    }
+
+    const savedOTP = await redis.get(`otp:${userId}`);
+
+    if (!savedOTP) {
+      console.log("No OTP found or OTP expired for userId:", userId); 
+      return next(new ErrorHandler("OTP Expired! Please Try Again.", 400));
+    }
+
+    if (savedOTP !== otp) {
+      return next(new ErrorHandler("Invalid OTP!", 400));
+    }
+
+    const user = await User.findById(userId);
+    console.log("User found for password reset:", user); 
+
+    if (!user) {
+      return next(new ErrorHandler("User Not Found!", 404));
+    }
+
+    const newPassword = inputPassword ;
+    console.log("New Password:", newPassword); 
+
+    // const salt = await bcrypt.genSalt(10);
+    // const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+    // console.log("Hashed New Password:", hashedNewPassword); 
+
+    // user.password = hashedNewPassword;
+    user.password = newPassword;
+    await user.save();
+
+    console.log("Password Reset Successfully!");  
+    await redis.del(`otp:${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Password Reset Successfully!",
+    });
+
+  } catch (error) {
+    console.error("Error occurred while resetting password:", error);
+    return next(new ErrorHandler("Error occurred while processing request", 500));
+  }
+})
