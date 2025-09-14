@@ -10,7 +10,8 @@ import {
 import {
   isAdminAuthenticated,
   isPatientAuthenticated,
-  isDoctorAuthenticated
+  isDoctorAuthenticated,
+  isDoctorOrPatientAuthenticated
 } from "../middlewares/auth.js";
 
 const router = express.Router();
@@ -22,16 +23,16 @@ router.post(
   createDescription
 );
 
-// Get patient's descriptions (Patient or Doctor)
+// Get patient's descriptions (Patient & Doctor only)
 router.get(
   "/patient/:patientId",
-  isPatientAuthenticated || isDoctorAuthenticated,
+  isDoctorOrPatientAuthenticated,
   getPatientDescriptions
 );
 
-// Get single description (Doctor only)
+// Get all descriptions (Doctor only)
 router.get(
-  "/:id",
+  "/allDescriptions",
   isDoctorAuthenticated,
   getDescription
 );
@@ -46,7 +47,6 @@ router.get(
 // Generate PDF (Patient, Doctor or Admin)
 router.get(
   "/:id/pdf",
- // isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
   generateDescriptionPDF
 );
 
