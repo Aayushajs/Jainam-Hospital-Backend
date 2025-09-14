@@ -16,10 +16,13 @@ import {
   logoutPatient,
   patientRegister,
   getPatientsWithAppointments,
+  getLoginHistory,
+  getLoginHistoryByUserId,
 } from "../controller/userController.js";
 import {
   isAdminAuthenticated,
   isDoctorAuthenticated,
+  isAdminOrDoctorAuthenticated,
   isPatientAuthenticated,
 } from "../middlewares/auth.js";
 
@@ -40,6 +43,8 @@ router.get("/admins", isAdminAuthenticated, getAllAdmins);
 router.get("/patient/logout", isPatientAuthenticated, logoutPatient);
 router.get("/admin/logout", isAdminAuthenticated, logoutAdmin);
 router.get("/doctor/logout", isDoctorAuthenticated, logoutDoctor);
+router.get("/login-history", isAdminAuthenticated, getLoginHistory);
+router.get("/login-history/:id", isAdminOrDoctorAuthenticated, getLoginHistoryByUserId);
 router.put("/admin/update", isAdminAuthenticated, updateAdminProfile);
 router.put("/patient/update", isPatientAuthenticated, updatePatientProfile);
 router.put("/doctor/update", isDoctorAuthenticated, updateDoctorProfile);

@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema({
   },
   dob: {
     type: Date,
-    required: [true, "DOB Is Required!"],
+    required: [true, "DOB Is Re quired!"],
   },
   gender: {
     type: String,

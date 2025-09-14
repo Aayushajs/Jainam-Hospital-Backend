@@ -4,6 +4,89 @@ import ErrorHandler from "../middlewares/error.js";
 import { generateToken } from "../utils/jwtToken.js";
 import cloudinary from "cloudinary";
 import { Appointment } from "../models/appointmentSchema.js";
+import LoginHistory from "../models/loginHistorySchema.js";
+
+// Get login history (admin only) with pagination and filters
+export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const skip = (page - 1) * limit;
+
+  const { role, action, userId, startDate, endDate } = req.query;
+
+  const filter = {};
+  if (role) { filter.role = role; } // Admin or Doctor
+  if (action) { filter.action = action; } // login or logout
+  if (userId) { filter.userId = userId; }
+  if (startDate || endDate) {
+    filter.timestamp = {};
+    if (startDate) { filter.timestamp.$gte = new Date(startDate); }
+    if (endDate) { filter.timestamp.$lte = new Date(endDate); }
+  }
+
+  const [total, items] = await Promise.all([
+    LoginHistory.countDocuments(filter),
+    LoginHistory.find(filter)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({ path: 'userId', select: 'firstName lastName email role' }),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    items,
+  });
+});
+
+// Get login history for a single user id
+// Response contains two arrays:
+// - latest: latest 10 loginHistory entries
+// - all: paginated full loginHistory entries for that user
+export const getLoginHistoryByUserId = catchAsyncErrors(async (req, res, next) => {
+  const { id } = req.params;
+  // Authorization: Admin can view any, Doctor can view only their own
+  if (req.user.role === "Doctor" && req.user._id.toString() !== id) {
+    return next(new ErrorHandler("Unauthorized: doctors can only access their own history", 403));
+  }
+
+  const user = await User.findById(id).select("firstName lastName email role doctorDepartment docAvatar");
+  if (!user) {
+    return next(new ErrorHandler("User not found", 404));
+  }
+
+  // latest 10
+  const latest = await LoginHistory.find({ userId: id })
+    .sort({ timestamp: -1 })
+    .limit(10)
+    .populate({ path: 'userId', select: 'firstName lastName email role doctorDepartment docAvatar' });
+
+  // all (paginated)
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 100;
+  const skip = (page - 1) * limit;
+  const total = await LoginHistory.countDocuments({ userId: id });
+  const all = await LoginHistory.find({ userId: id })
+    .sort({ timestamp: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate({ path: 'userId', select: 'firstName lastName email role doctorDepartment docAvatar' });
+
+  res.status(200).json({
+    success: true,
+    user,
+    latest,
+    all,
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  });
+});
 
 // petient section
 export const patientRegister = catchAsyncErrors(async (req, res, next) => {
@@ -71,6 +154,21 @@ export const login = catchAsyncErrors(async (req, res, next) => {
   const isPasswordMatch = await user.comparePassword(password);
   if (!isPasswordMatch) {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
+  }
+
+  // Record login event for Admin / Doctor before issuing token
+  if (user.role === "Admin" || user.role === "Doctor") {
+    try {
+      await LoginHistory.create({
+        userId: user._id,
+        role: user.role,
+        action: "login",
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      // non-fatal: log and continue
+      console.error("Failed to record login history:", err);
+    }
   }
 
   generateToken(user, "Login Successfully!", 201, res);
@@ -259,7 +357,7 @@ export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
 
 // get all doctors for admin
 export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
-  const user = req.user;
+  const { user } = req;
   res.status(200).json({
     success: true,
     user,
@@ -268,6 +366,20 @@ export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
 
 // Logout function for dashboard admin
 export const logoutAdmin = catchAsyncErrors(async (req, res, next) => {
+  // Record logout event (best-effort)
+  if (req.user && req.user.role === "Admin") {
+    try {
+      await LoginHistory.create({
+        userId: req.user._id,
+        role: "Admin",
+        action: "logout",
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.error("Failed to record logout history:", err);
+    }
+  }
+
   res
     .status(201)
     .cookie("adminToken", "", {
@@ -300,6 +412,20 @@ export const logoutPatient = catchAsyncErrors(async (req, res, next) => {
 
 // doctor logout
 export const logoutDoctor = catchAsyncErrors(async (req, res, next) => {
+  // Record logout event (best-effort)
+  if (req.user && req.user.role === "Doctor") {
+    try {
+      await LoginHistory.create({
+        userId: req.user._id,
+        role: "Doctor",
+        action: "logout",
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.error("Failed to record logout history:", err);
+    }
+  }
+
   res
     .status(201)
     .cookie("doctorToken", "", {
@@ -598,7 +724,7 @@ export const updateDoctorProfile = catchAsyncErrors(async (req, res, next) => {
   }
 
   if (req.files && req.files.docAvatar) {
-    const docAvatar = req.files.docAvatar;
+    const { docAvatar } = req.files;
     const allowedFormats = ["image/png", "image/jpeg", "image/webp"];
 
     if (!allowedFormats.includes(docAvatar.mimetype)) {
