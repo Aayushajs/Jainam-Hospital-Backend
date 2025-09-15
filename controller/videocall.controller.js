@@ -1,6 +1,7 @@
 import VideoCall from '../models/videocall.schema.js';
 import { v4 as uuidv4 } from 'uuid';
 import { getIO } from '../utils/websocket.js';
+import { redis } from '../config/redis.js';
 
 // Schedule a new video consultation
 export const scheduleCall = async (req, res) => {
@@ -49,6 +50,16 @@ export const scheduleCall = async (req, res) => {
 export const getCallDetails = async (req, res) => {
   try {
     const { roomId } = req.params;
+
+    const redisKey = `callDetails:${roomId}`;
+    const cachedData = await redis.get(redisKey);
+    if (cachedData) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        ...JSON.parse(cachedData)
+      });
+    }
     
     // Fetch call details with doctor information
     const call = await VideoCall.findOne({ roomId })
@@ -92,8 +103,12 @@ export const getCallDetails = async (req, res) => {
       endedAt: call.endedAt
     };
 
+    await redis.setEx(redisKey, 3600, JSON.stringify(response));
+
+
     res.status(200).json({
       success: true,
+      cached: false,
       call: response
     });
 
@@ -105,7 +120,71 @@ export const getCallDetails = async (req, res) => {
   }
 };
 
+
+
+// export const getCallDetails = async (req, res) => {
+//   try {
+//     const { roomId } = req.params;
+    
+//     // Fetch call details with doctor information
+//     const call = await VideoCall.findOne({ roomId })
+//       .populate('doctorId', 'firstName lastName doctorDepartment email phone docAvatar')
+//       .populate('patientId', 'firstName lastName email phone');
+
+//     if (!call) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Call not found'
+//       });
+//     }
+
+//     // Format response
+//     const response = {
+//       roomId: call.roomId,
+//       scheduledAt: call.scheduledAt,
+//       duration: call.duration,
+//       status: call.status,
+//       doctor: {
+//         id: call.doctorId._id,
+//          firstname: call.doctorId.firstName,
+//          lastName: call.doctorId.lastName,
+//         specialization: call.doctorId.doctorDepartment,
+//         contact: {
+//           email: call.doctorId.email,
+//           phone: call.doctorId.phone
+//         },
+//         profilePicture: call.doctorId.docAvatar
+//       },
+//       patient: {
+//         id: call.patientId._id,
+//         firstname: call.patientId.firstName,
+//          lastName: call.patientId.lastName,
+//         contact: {
+//           email: call.patientId.email,
+//           phone: call.patientId.phone
+//         }
+//       },
+//       createdAt: call.createdAt,
+//       endedAt: call.endedAt
+//     };
+
+//     res.status(200).json({
+//       success: true,
+//       call: response
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
+
 // Join a video call
+
+
+
 export const  joinCall = async (req, res) => {
   try {
     const { roomId, userId } = req.body;
@@ -198,14 +277,30 @@ export const endCall = async (req, res) => {
 export const getUpcomingCalls = async (req, res) => {
   try {
     const { userId } = req.params;
+
+    const redisKey = `upcomingCalls:${userId}`;
+    const cachedData = await redis.get(redisKey);
+
+    if (cachedData) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        ...JSON.parse(cachedData)
+      });
+    }
+
+    // Fetch upcoming calls for the user
     const calls = await VideoCall.find({
       $or: [{ doctorId: userId }, { patientId: userId }],
       status: { $in: ['scheduled', 'ongoing'] },
       scheduledAt: { $gte: new Date() }
     }).sort({ scheduledAt: 1 });
 
+    await redis.setEx(redisKey, 3600, JSON.stringify(calls));
+
     res.status(200).json({
       success: true,
+      cached: false,
       calls
     });
 
@@ -216,3 +311,26 @@ export const getUpcomingCalls = async (req, res) => {
     });
   }
 };
+
+
+// export const getUpcomingCalls = async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+//     const calls = await VideoCall.find({
+//       $or: [{ doctorId: userId }, { patientId: userId }],
+//       status: { $in: ['scheduled', 'ongoing'] },
+//       scheduledAt: { $gte: new Date() }
+//     }).sort({ scheduledAt: 1 });
+
+//     res.status(200).json({
+//       success: true,
+//       calls
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };

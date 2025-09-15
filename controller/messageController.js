@@ -1,6 +1,7 @@
 import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
 import ErrorHandler from "../middlewares/error.js";
 import { Message } from "../models/messageSchema.js";
+import {redis} from "../config/redis.js"
 
 export const sendMessage = catchAsyncErrors(async (req, res, next) => {
   const { firstName, lastName, email, phone, message } = req.body;
@@ -15,8 +16,61 @@ export const sendMessage = catchAsyncErrors(async (req, res, next) => {
 });
 
 // get all messages with pagination
+// export const getAllMessages = catchAsyncErrors(async (req, res, next) => {
+//   const { page = 1, limit = 10 } = req.query; // Default pagination values
+
+//   const redisKey = `messages:page:${page}:limit:${limit}`;
+
+//   const cachedData = await redis.get(redisKey);
+//   if (cachedData) {
+//     return res.status(200).json({
+//       success: true,
+//       cached: true,
+//       ...JSON.parse(cachedData)
+//     })
+//   }
+
+
+//   const [messages, totalCount] = await Promise.all([
+//     Message.find()
+//       .sort({ createdAt: -1 })
+//       .skip((page - 1) * limit)
+//       .limit(Number(limit)),
+//     Message.countDocuments()
+//   ]);
+
+//   const responseData = {
+//     count: messages.length, 
+//     totalCount,            
+//     totalPages: Math.ceil(totalCount / limit),
+//     currentPage: Number(page),
+//     messages,
+//   }
+
+//   await redis.setEx(redisKey, 3600, JSON.stringify(responseData));
+
+
+//   res.status(200).json({
+//     success: true,
+//     cached: false,
+//     ...responseData
+//   });
+// });
+
+
 export const getAllMessages = catchAsyncErrors(async (req, res, next) => {
   const { page = 1, limit = 10 } = req.query; // Default pagination values
+
+  const redisKey = `messages:page:${page}:limit:${limit}`;
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) { 
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    })
+  }
 
   const [messages, totalCount] = await Promise.all([
     Message.find()
@@ -26,15 +80,48 @@ export const getAllMessages = catchAsyncErrors(async (req, res, next) => {
     Message.countDocuments()
   ]);
 
-  res.status(200).json({
-    success: true,
+  const responseData = {
     count: messages.length, 
     totalCount,            
     totalPages: Math.ceil(totalCount / limit),
     currentPage: Number(page),
     messages,
+  }
+
+  await redis.setEx(redisKey, 3600, JSON.stringify(responseData));
+
+
+
+  res.status(200).json({
+    success: true,
+    cached: false,
+    ...responseData,
   });
 });
+
+
+// export const getAllMessages = catchAsyncErrors(async (req, res, next) => {
+//   const { page = 1, limit = 10 } = req.query; // Default pagination values
+
+//   const [messages, totalCount] = await Promise.all([
+//     Message.find()
+//       .sort({ createdAt: -1 })
+//       .skip((page - 1) * limit)
+//       .limit(Number(limit)),
+//     Message.countDocuments()
+//   ]);
+
+//   res.status(200).json({
+//     success: true,
+//     count: messages.length, 
+//     totalCount,            
+//     totalPages: Math.ceil(totalCount / limit),
+//     currentPage: Number(page),
+//     messages,
+//   });
+// });
+
+
 
 export const DeleteMessage = catchAsyncErrors(async (req, res, next) => {
   const { id } = req.params;

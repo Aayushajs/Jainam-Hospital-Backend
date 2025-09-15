@@ -23,28 +23,28 @@ router.post(
   createDescription
 );
 
-// Get patient's descriptions (Patient & Doctor only)
+// Get patient's descriptions (Patient & Doctor only) --> redis req
 router.get(
   "/patient/:patientId",
   isDoctorOrPatientAuthenticated,
   getPatientDescriptions
 );
 
-// Get all descriptions (Doctor only)
+// Get all descriptions (Doctor only)                 --> redis req
 router.get(
   "/allDescriptions",
   isDoctorAuthenticated,
   getDescription
 );
 
-// Get filtered descriptions (Admin only)
+// Get filtered descriptions (Admin only)             -->redis req
 router.get(
   "/admin/filter",
   isAdminAuthenticated,
   getDescriptionsByFilters
 );
 
-// Generate PDF (Patient, Doctor or Admin)
+// Generate PDF (Patient, Doctor or Admin)           --> may be redis to used   
 router.get(
   "/:id/pdf",
   generateDescriptionPDF

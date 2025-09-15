@@ -5,7 +5,7 @@ import { sendMessage, getMessages,deleteChatMessages } from "../controller/chatC
 const router = express.Router();
 
 router.post("/send", sendMessage);
-router.get("/messages/:roomId", getMessages);
+router.get("/messages/:roomId", getMessages);   // --> redis used
 router.delete("/delete/:roomId/:messageId", deleteChatMessages);
 
 export default router;

@@ -16,7 +16,7 @@ router.post('/schedule',
   scheduleCall
 );
 
-// Get call details
+// Get call details                 --> redis used
 router.get('/:roomId',  
    // isPatientAuthenticated || isDoctorAuthenticated || isAdminAuthenticated,
   getCallDetails
@@ -34,7 +34,7 @@ router.post('/end',
   endCall
 );
 
-// Get user's upcoming calls
+// Get user's upcoming calls         --> redis used
 router.get('/upcoming/:userId', 
     isPatientAuthenticated|| isDoctorAuthenticated,
   getUpcomingCalls

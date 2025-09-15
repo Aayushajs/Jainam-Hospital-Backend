@@ -21,14 +21,13 @@ import {
 const router = express.Router();
 
 router.post("/post", isPatientAuthenticated, postAppointment);
-router.get("/getall", isAdminAuthenticated, getAllAppointments);
-router.get("/getMyAppointments", isDoctorAuthenticated, getMyAppointments);
-router.get("/getfiltered", isAdminAuthenticated, getFilteredAppointments);
+router.get("/getall", isAdminAuthenticated, getAllAppointments);              // --> redis used
+router.get("/getMyAppointments", isDoctorAuthenticated, getMyAppointments);   // --> redis used
+router.get("/getfiltered", isAdminAuthenticated, getFilteredAppointments);    // --> redis can be used here 
 router.put("/update/:id", isAdminOrDoctorAuthenticated, updateAppointmentStatus);
-router.get("/:id", isAdminOrDoctorAuthenticated, getAppointmentById);
+router.get("/:id", isAdminOrDoctorAuthenticated, getAppointmentById);         // --> redis used
 router.post("/appointment/alert", startAppointmentAlert);
 router.delete("/delete/:id", isAdminAuthenticated, deleteAppointment);
-router.get("/getpatientappointments/:patientId", isPatientAuthenticated,getPatientAppointments
-);
+router.get("/getpatientappointments/:patientId", isPatientAuthenticated,getPatientAppointments);  // --> redis used
 
 export default router;

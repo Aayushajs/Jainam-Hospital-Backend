@@ -1,6 +1,7 @@
 import { Appointment } from "../models/appointmentSchema.js";
 import { Description } from "../models/descriptionSchema.js";
 import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
+import {redis} from "../config/redis.js"
 import ErrorHandler from "../middlewares/error.js";
 import PDFDocument from 'pdfkit';
 
@@ -82,7 +83,18 @@ export const createDescription = catchAsyncErrors(async (req, res, next) => {
 // Get  descriptions only for a patient
 export const getPatientDescriptions = catchAsyncErrors(async (req, res, next) => {
   const { patientId } = req.params;
-  
+
+  const redisKey = `descriptions:patient:${patientId}`;
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) {
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    });
+  }
+
   const descriptions = await Description.find({ patientId })
     .populate('doctorId', 'firstName lastName email phone doctorDepartment')
     .populate('appointmentId', 'appointment_date status department') // Added appointment details
@@ -112,15 +124,79 @@ export const getPatientDescriptions = catchAsyncErrors(async (req, res, next) =>
     nextVisit: desc.nextVisit
   }));
 
-  res.status(200).json({
-    success: true,
+  const responseData = {
     count: descriptions.length,
     descriptions: response
+  }
+
+
+  await redis.setEx(redisKey, 300, JSON.stringify(responseData));
+
+
+  res.status(200).json({
+    success: true,
+    cached: false,
+    ...responseData
   });
 });
 
+
+// export const getPatientDescriptions = catchAsyncErrors(async (req, res, next) => {
+//   const { patientId } = req.params;
+  
+//   const descriptions = await Description.find({ patientId })
+//     .populate('doctorId', 'firstName lastName email phone doctorDepartment')
+//     .populate('appointmentId', 'appointment_date status department') // Added appointment details
+//     .sort({ date: -1 });
+
+
+//   const response = descriptions.map(desc => ({
+//     _id: desc._id,
+//     diagnosis: desc.diagnosis,
+//     date: desc.date,
+//     doctor: {
+//       _id: desc.doctorId._id,
+//       name: `${desc.doctorId.firstName} ${desc.doctorId.lastName}`,
+//       department: desc.doctorId.doctorDepartment,
+//       contact: {
+//         email: desc.doctorId.email,
+//         phone: desc.doctorId.phone
+//       }
+//     },
+//     appointment: desc.appointmentId ? {
+//       _id: desc.appointmentId._id,
+//       date: desc.appointmentId.appointment_date,
+//       status: desc.appointmentId.status,
+//       department: desc.appointmentId.department
+//     } : null,
+//     medicines: desc.medicines,
+//     nextVisit: desc.nextVisit
+//   }));
+
+//   res.status(200).json({
+//     success: true,
+//     count: descriptions.length,
+//     descriptions: response
+//   });
+// });
+
+
+
 // Get all descriptions for a doctor
+
 export const getDescription = catchAsyncErrors(async (req, res, next) => {
+
+  const redisKey = `descriptions:doctor:${req.user._id}`;
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) {
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    });
+  }
+
   const description = await Description.findOne({
     doctorId: req.user._id // Ensure the description belongs to the requesting doctor
   })
@@ -131,15 +207,50 @@ export const getDescription = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Description not found or unauthorized access", 404));
   }
 
+  await redis.setEx(redisKey, 300, JSON.stringify(description));
+
+
   res.status(200).json({
     success: true,
+    cached: false,
     description
   });
 });
 
+
+// export const getDescription = catchAsyncErrors(async (req, res, next) => {
+//   const description = await Description.findOne({
+//     doctorId: req.user._id // Ensure the description belongs to the requesting doctor
+//   })
+//   .populate('patientId', 'firstName lastName nic dob gender')
+//   .populate('doctorId', 'firstName lastName email phone doctorDepartment address');
+
+//   if (!description) {
+//     return next(new ErrorHandler("Description not found or unauthorized access", 404));
+//   }
+
+//   res.status(200).json({
+//     success: true,
+//     description
+//   });
+// });
+
+
+
 // for admin
 export const getDescriptionsByFilters = catchAsyncErrors(async (req, res, next) => {
   const { patientId, doctorId, date, diagnosis, icdCode, isEmergency } = req.query;
+
+  const redisKey = `descriptions:filters:${patientId}:${doctorId}:${date}:${diagnosis}:${icdCode}:${isEmergency}`;
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) {
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    });
+  }
   
   const filter = {};
   if (patientId) filter.patientId = patientId;
@@ -161,15 +272,52 @@ export const getDescriptionsByFilters = catchAsyncErrors(async (req, res, next) 
     .populate('doctorId', 'firstName lastName doctorDepartment')
     // descripition id in response
 
-    
+    const responseData = {
+      count: descriptions.length,
+      descriptions
+    }
+
+  await redis.setEx(redisKey, 3600, JSON.stringify(responseData));    
 
   res.status(200).json({
     success: true,
-    count: descriptions.length,
-   
-    descriptions
+    cached: false,
+    ...responseData,
   });
 });
+
+
+// export const getDescriptionsByFilters = catchAsyncErrors(async (req, res, next) => {
+//   const { patientId, doctorId, date, diagnosis, icdCode, isEmergency } = req.query;
+  
+//   const filter = {};
+//   if (patientId) filter.patientId = patientId;
+//   if (doctorId) filter.doctorId = doctorId;
+//   if (date) {
+//     const startDate = new Date(date);
+//     startDate.setHours(0, 0, 0, 0);
+//     const endDate = new Date(date);
+//     endDate.setHours(23, 59, 59, 999);
+//     filter.date = { $gte: startDate, $lte: endDate };
+//   }
+//   if (diagnosis) filter.diagnosis = { $regex: diagnosis, $options: 'i' };
+//   if (icdCode) filter.icdCode = icdCode;
+//   if (isEmergency) filter.isEmergency = isEmergency === 'true';
+
+//   const descriptions = await Description.find(filter)
+//     .sort({ date: -1 })
+//     .populate('patientId', 'firstName lastName')
+//     .populate('doctorId', 'firstName lastName doctorDepartment')
+//     // descripition id in response
+
+    
+
+//   res.status(200).json({
+//     success: true,
+//     count: descriptions.length,
+//     descriptions
+//   });
+// });
 
 
 export const generateDescriptionPDF = catchAsyncErrors(async (req, res, next) => {

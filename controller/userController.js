@@ -146,7 +146,7 @@ export const login = catchAsyncErrors(async (req, res, next) => {
 
 
   const user = await User.findOne({ email }).select("+password");
-  console.log("User found:", user); 
+  console.log("User found:", user);
 
   if (!user) {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
@@ -301,6 +301,20 @@ export const addNewDoctor = catchAsyncErrors(async (req, res, next) => {
 });
 // get all doctors
 export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
+
+  const redisKey = "doctors:all";
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) {
+    // console.log("Cached Data to get all the Doctors : ", cachedData);
+
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    })
+  }
+
   const doctors = await User.aggregate([
     { $match: { role: "Doctor" } },
 
@@ -357,13 +371,94 @@ export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
     { $sort: { totalAppointments: -1 } },
   ]);
 
+
+  const responseData = {
+    count: doctors.length,
+    doctors,
+  }
+  console.log("Response Data : ", responseData);
+
+  await redis.setEx(redisKey, 3600, JSON.stringify(responseData));
+
+
   res.status(200).json({
     success: true,
-    doctors,
+    cachd: false,
+    ...responseData
   });
 });
 
+
+
+// export const getAllDoctors = catchAsyncErrors(async (req, res, next) => {
+//   const doctors = await User.aggregate([
+//     { $match: { role: "Doctor" } },
+
+//     {
+//       $lookup: {
+//         from: "appointments",
+//         localField: "_id",
+//         foreignField: "doctorId",
+//         as: "appointments",
+//       },
+//     },
+
+//     {
+//       $addFields: {
+//         totalAppointments: { $size: "$appointments" },
+//         acceptedCount: {
+//           $size: {
+//             $filter: {
+//               input: "$appointments",
+//               as: "appt",
+//               cond: { $eq: ["$$appt.status", "Accepted"] },
+//             },
+//           },
+//         },
+//         rejectedCount: {
+//           $size: {
+//             $filter: {
+//               input: "$appointments",
+//               as: "appt",
+//               cond: { $eq: ["$$appt.status", "Rejected"] },
+//             },
+//           },
+//         },
+//         pendingCount: {
+//           $size: {
+//             $filter: {
+//               input: "$appointments",
+//               as: "appt",
+//               cond: { $eq: ["$$appt.status", "Pending"] },
+//             },
+//           },
+//         },
+//       },
+//     },
+
+//     {
+//       $project: {
+//         password: 0,
+//         __v: 0,
+//         appointments: 0,
+//       },
+//     },
+
+//     { $sort: { totalAppointments: -1 } },
+//   ]);
+
+//   res.status(200).json({
+//     success: true,
+//     doctors,
+//   });
+// });
+
 // get all doctors for admin
+
+
+
+
+
 export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
   const { user } = req;
   res.status(200).json({
@@ -371,6 +466,30 @@ export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
     user,
   });
 });
+// export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
+//   const { user } = req;
+
+//   const redisKey = `user:${user._id}`;
+
+//   const cachedUser = await redis.get(redisKey);
+
+//   if(cachedUser){
+//     console.log("Cached User:", cachedUser);
+//     return res.status(200).json({
+//       sucess: true,
+//       user: JSON.parse(cachedUser),
+//       chached: true
+//     })
+//   }
+
+//   await redis.setEx(redisKey, 3600, JSON.stringify(user));
+
+//   res.status(200).json({
+//     success: true,
+//     user,
+//     chached: false
+//   });
+// });
 
 // Logout function for dashboard admin
 export const logoutAdmin = catchAsyncErrors(async (req, res, next) => {
@@ -451,6 +570,20 @@ export const logoutDoctor = catchAsyncErrors(async (req, res, next) => {
 // get all rgistered patients
 export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
   try {
+
+    const redisKey = "patients:all";
+
+    const cachedData = await redis.get(redisKey);
+    if (cachedData) {
+      // console.log("Cached Data to get all the Patients : ", cachedData);
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        ...JSON.parse(cachedData),
+      })
+    }
+
+
     // Get all patients and their appointment counts in a single query using aggregation
     const patientsWithCount = await User.aggregate([
       {
@@ -478,15 +611,70 @@ export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
       },
     ]);
 
-    res.status(200).json({
-      success: true,
+    const responseData = {
       count: patientsWithCount.length,
       patients: patientsWithCount,
-    });
+    }
+
+    console.log("Response Data : ", responseData);
+
+    //set expiry of redis
+    await redis.setEx(redisKey, 3600, JSON.stringify(responseData));
+
+    res.status(200).json({
+      success: true,
+      chached: false,
+      ...responseData
+    })
   } catch (error) {
     return next(new ErrorHandler("Error fetching patients", 500));
   }
 });
+
+
+
+// export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
+//   try {
+//     // Get all patients and their appointment counts in a single query using aggregation
+//     const patientsWithCount = await User.aggregate([
+//       {
+//         $match: { role: "Patient" },
+//       },
+//       {
+//         $lookup: {
+//           from: "appointments",
+//           localField: "_id",
+//           foreignField: "patientId",
+//           as: "appointments",
+//         },
+//       },
+//       {
+//         $addFields: {
+//           appointmentCount: { $size: "$appointments" },
+//         },
+//       },
+//       {
+//         $project: {
+//           password: 0,
+//           __v: 0,
+//           appointments: 0, // Remove the appointments array after counting
+//         },
+//       },
+//     ]);
+
+//     res.status(200).json({
+//       success: true,
+//       count: patientsWithCount.length,
+//       patients: patientsWithCount,
+//     });
+//   } catch (error) {
+//     return next(new ErrorHandler("Error fetching patients", 500));
+//   }
+// });
+
+
+
+
 
 // get patient details by only dr.
 export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, next) => {
@@ -495,6 +683,19 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+
+    const redisKey = `patients:doctor:${doctorId}:page:${page}:limit:${limit}`;
+
+    const cachedData = await redis.get(redisKey);
+    if (cachedData) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        ...JSON.parse(cachedData)
+      })
+    }
+
+
 
     // Get patients who have appointments with this doctor
     const aggregationPipeline = [
@@ -551,18 +752,108 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
       })
     ]);
 
-    res.status(200).json({
-      success: true,
+    const responseData = {
       count: patients.length,
       totalCount,
       totalPages: Math.ceil(totalCount / limit),
       currentPage: page,
       patients,
+    };
+
+    // cache this specific page
+    await redis.setEx(redisKey, 3600, JSON.stringify(responseData));
+
+
+    res.status(200).json({
+      success: true,
+      cached: false,
+      ...responseData,
     });
+
+
   } catch (error) {
     return next(new ErrorHandler("Error fetching patients with appointments", 500));
   }
 });
+
+
+
+// export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, next) => {
+//   try {
+//     const doctorId = req.user._id; // Assuming the doctor is logged in and their ID is in req.user
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 10;
+//     const skip = (page - 1) * limit;
+
+//     // Get patients who have appointments with this doctor
+//     const aggregationPipeline = [
+//       {
+//         $match: {
+//           role: "Patient",
+//           // Only patients who have appointments with this doctor
+//           _id: {
+//             $in: await Appointment.distinct("patientId", { doctorId: doctorId })
+//           }
+//         }
+//       },
+//       {
+//         $lookup: {
+//           from: "appointments",
+//           let: { patientId: "$_id" },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $and: [
+//                     { $eq: ["$patientId", "$$patientId"] },
+//                     { $eq: ["$doctorId", doctorId] }
+//                   ]
+//                 }
+//               }
+//             }
+//           ],
+//           as: "appointmentsWithDoctor"
+//         }
+//       },
+//       {
+//         $addFields: {
+//           appointmentCount: { $size: "$appointmentsWithDoctor" },
+//         },
+//       },
+//       {
+//         $project: {
+//           password: 0,
+//           __v: 0,
+//           appointmentsWithDoctor: 0, // Remove the appointments array after counting
+//         },
+//       },
+//       { $skip: skip },
+//       { $limit: limit }
+//     ];
+
+//     // Get both paginated results and total count
+//     const [patients, totalCount] = await Promise.all([
+//       User.aggregate(aggregationPipeline),
+//       User.countDocuments({
+//         role: "Patient",
+//         _id: { $in: await Appointment.distinct("patientId", { doctorId: doctorId }) }
+//       })
+//     ]);
+
+//     res.status(200).json({
+//       success: true,
+//       count: patients.length,
+//       totalCount,
+//       totalPages: Math.ceil(totalCount / limit),
+//       currentPage: page,
+//       patients,
+//     });
+//   } catch (error) {
+//     return next(new ErrorHandler("Error fetching patients with appointments", 500));
+//   }
+// });
+
+
 
 
 // delete doctor
@@ -598,6 +889,21 @@ export const deleteDoctor = catchAsyncErrors(async (req, res, next) => {
 
 // get all admins
 export const getAllAdmins = catchAsyncErrors(async (req, res, next) => {
+
+  const redisKey = "admins:all";
+
+  const cachedData = await redis.get(redisKey);
+  if (cachedData) {
+    // console.log("Cached Data to get all the Admins : ", cachedData);
+
+    return res.status(200).json({
+      success: true,
+      cached: true,
+      ...JSON.parse(cachedData)
+    })
+  }
+
+  
   const admins = await User.aggregate([
     { $match: { role: "Admin" } },
 
@@ -625,13 +931,58 @@ export const getAllAdmins = catchAsyncErrors(async (req, res, next) => {
     { $sort: { doctorsCreatedCount: -1 } },
   ]);
 
+  await redis.setEx(redisKey, 3600, JSON.stringify(admins));
+
   res.status(200).json({
     success: true,
+    cached: false,
     admins,
-  });
+  })
+
 });
 
+
+// export const getAllAdmins = catchAsyncErrors(async (req, res, next) => {
+
+  
+//   const admins = await User.aggregate([
+//     { $match: { role: "Admin" } },
+
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "_id",
+//         foreignField: "createdBy",
+//         as: "doctorsCreated",
+//       },
+//     },
+//     {
+//       $addFields: {
+//         doctorsCreatedCount: { $size: "$doctorsCreated" },
+//       },
+//     },
+//     {
+//       $project: {
+//         password: 0,
+//         __v: 0,
+//         doctorsCreated: 0,
+//       },
+//     },
+//     // Sort by doctor count (descending)
+//     { $sort: { doctorsCreatedCount: -1 } },
+//   ]);
+
+//   res.status(200).json({
+//     success: true,
+//     admins,
+//   });
+// });
+
 // upadate profile
+
+
+
+
 export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   const { firstName, lastName, email, phone, nic, dob, gender } = req.body;
 
@@ -797,7 +1148,7 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
     }
 
     const otp = generateOTP();
-    console.log("Generated OTP:", otp); 
+    console.log("Generated OTP:", otp);
     await redis.set(`otp:${userExists._id}`, otp, 'EX', 600);
     if (email) {
       console.log("Sending OTP to email:", email);
@@ -828,7 +1179,7 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
     const savedOTP = await redis.get(`otp:${userId}`);
 
     if (!savedOTP) {
-      console.log("No OTP found or OTP expired for userId:", userId); 
+      console.log("No OTP found or OTP expired for userId:", userId);
       return next(new ErrorHandler("OTP Expired! Please Try Again.", 400));
     }
 
@@ -837,14 +1188,14 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
     }
 
     const user = await User.findById(userId);
-    console.log("User found for password reset:", user); 
+    console.log("User found for password reset:", user);
 
     if (!user) {
       return next(new ErrorHandler("User Not Found!", 404));
     }
 
-    const newPassword = inputPassword ;
-    console.log("New Password:", newPassword); 
+    const newPassword = inputPassword;
+    console.log("New Password:", newPassword);
 
     // const salt = await bcrypt.genSalt(10);
     // const hashedNewPassword = await bcrypt.hash(newPassword, salt);
@@ -854,7 +1205,7 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
     user.password = newPassword;
     await user.save();
 
-    console.log("Password Reset Successfully!");  
+    console.log("Password Reset Successfully!");
     await redis.del(`otp:${userId}`);
 
     res.status(200).json({

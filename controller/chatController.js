@@ -1,5 +1,7 @@
 // controllers/chatController.js
 import { getIO } from "../utils/websocket.js";
+import {redis} from "../config/redis.js"
+
 
 const chatMessages = {};
 
@@ -24,16 +26,52 @@ export const sendMessage = (req, res) => {
   res.status(200).json({ success: true, message: newMessage });
 };
 
-export const getMessages = (req, res) => {
-  const { roomId } = req.params;
-  res.status(200).json({
-    success: true,
-    roomId,
-    messages: chatMessages[roomId] || [],
-  });
+export const getMessages = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+
+    const redisKey = `messages:room:${roomId}`;
+
+    const cachedData = await redis.get(redisKey);
+    if (cachedData) {
+      return res.status(200).json({
+        success: true,
+        cached: true,
+        roomId,
+        messages: JSON.parse(cachedData),
+      });
+    }
+
+    const messages = chatMessages[roomId] || [];
+    await redis.setEx(redisKey, 300, JSON.stringify(messages));
+
+    res.status(200).json({
+      success: true,
+      cached: false,
+      roomId,
+      messages,
+    });
+  } catch (error) {
+    console.error("Error fetching messages:", error);
+    res.status(500).json({ success: false, message: "Failed to get messages" });
+  }
 };
 
+
+// export const getMessages = (req, res) => {
+//   const { roomId } = req.params;
+//   res.status(200).json({
+//     success: true,
+//     roomId,
+//     messages: chatMessages[roomId] || [],
+//   });
+// };
+
+
+
+
 // Delete specific chat messages
+
 export const deleteChatMessages = (req, res) => {
   const { roomId, messageId } = req.params;
 
