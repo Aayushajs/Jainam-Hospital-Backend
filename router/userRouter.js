@@ -16,6 +16,8 @@ import {
   logoutPatient,
   patientRegister,
   getPatientsWithAppointments,
+  forgotPassword,
+  resetPassword,
   getLoginHistory,
   getLoginHistoryByUserId,
 } from "../controller/userController.js";
@@ -48,6 +50,8 @@ router.get("/login-history/:id", isAdminOrDoctorAuthenticated, getLoginHistoryBy
 router.put("/admin/update", isAdminAuthenticated, updateAdminProfile);
 router.put("/patient/update", isPatientAuthenticated, updatePatientProfile);
 router.put("/doctor/update", isDoctorAuthenticated, updateDoctorProfile);
+router.post("/forgot/password", forgotPassword);
+router.post("/reset/password", isPatientAuthenticated, resetPassword);
 
 
 export default router;
