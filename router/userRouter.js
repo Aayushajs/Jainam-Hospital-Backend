@@ -18,6 +18,7 @@ import {
   getPatientsWithAppointments,
   getLoginHistory,
   getLoginHistoryByUserId,
+  getMyLoginHistory,
 } from "../controller/userController.js";
 import {
   isAdminAuthenticated,
@@ -45,6 +46,7 @@ router.get("/admin/logout", isAdminAuthenticated, logoutAdmin);
 router.get("/doctor/logout", isDoctorAuthenticated, logoutDoctor);
 router.get("/login-history", isAdminAuthenticated, getLoginHistory);
 router.get("/login-history/:id", isAdminOrDoctorAuthenticated, getLoginHistoryByUserId);
+router.get("/loginHistory/me", isAdminOrDoctorAuthenticated, getMyLoginHistory);
 router.put("/admin/update", isAdminAuthenticated, updateAdminProfile);
 router.put("/patient/update", isPatientAuthenticated, updatePatientProfile);
 router.put("/doctor/update", isDoctorAuthenticated, updateDoctorProfile);
