@@ -888,21 +888,8 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
         }),
       ]);
 
-      res.status(200).json({
-        success: true,
-        count: patients.length,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit),
-        currentPage: page,
-        patients,
-      });
-    } catch (error) {
-      return next(
-        new ErrorHandler("Error fetching patients with appointments", 500)
-      );
-    }
-  }
-);
+      
+    
     const responseData = {
       count: patients.length,
       totalCount,
@@ -921,6 +908,14 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
       ...responseData,
     });
 
+    res.status(200).json({
+        success: true,
+        count: patients.length,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        currentPage: page,
+        patients,
+      });
 
   } catch (error) {
     return next(new ErrorHandler("Error fetching patients with appointments", 500));
