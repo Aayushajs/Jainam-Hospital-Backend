@@ -14,9 +14,9 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-console.log("GMAIL_USER:", process.env.GMAIL_USER);
-console.log("GMAIL_PASS:", process.env.GMAIL_PASS? '******' : 'Not Set');
-console.log("Nodemailer Transporter:", transporter);
+// console.log("GMAIL_USER:", process.env.GMAIL_USER);
+// console.log("GMAIL_PASS:", process.env.GMAIL_PASS? '******' : 'Not Set');
+// console.log("Nodemailer Transporter:", transporter);
 
 export const sendEmail = async (email, otp) =>{
     const mailOptions = {

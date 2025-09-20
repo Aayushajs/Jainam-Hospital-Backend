@@ -1,9 +1,16 @@
-import { createClient } from "redis";
+import { createClient } from "redis"
+import dotenv from "dotenv"
+dotenv.config({ path: './config/.env' });
+
 
 export const redis = createClient({
-  url: process.env.REDIS_URL || "redis://127.0.0.1:6379"
+  url: process.env.REDIS_URL
 });
 
-redis.on("error", (err) => console.error("Redis Client Error", err));
+redis.on("error", function(err) {
+  throw err;
+});
+await redis.connect()
+await redis.set('foo','bar');
 
-await redis.connect();
+// await redis.disconnect();

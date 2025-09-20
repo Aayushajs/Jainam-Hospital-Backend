@@ -1150,6 +1150,7 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
     const otp = generateOTP();
     console.log("Generated OTP:", otp);
     await redis.set(`otp:${userExists._id}`, otp, 'EX', 600);
+    
     if (email) {
       console.log("Sending OTP to email:", email);
       await sendEmail(email, otp);

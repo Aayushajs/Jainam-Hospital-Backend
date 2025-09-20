@@ -83,7 +83,8 @@ export const postAppointment = catchAsyncErrors(async (req, res, next) => {
     message: "Appointment Send!",
   });
 });
-// Get all appointments
+
+
 export const getAllAppointments = catchAsyncErrors(async (req, res, next) => {
 
   const redisKey = `appointments`;
@@ -101,6 +102,7 @@ export const getAllAppointments = catchAsyncErrors(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
+    cached: false,
     appointments,
   });
 });
