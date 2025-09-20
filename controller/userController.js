@@ -3,11 +3,9 @@ import { User } from "../models/userSchema.js";
 import ErrorHandler from "../middlewares/error.js";
 import { generateToken } from "../utils/jwtToken.js";
 import cloudinary from "cloudinary";
+import mongoose from "mongoose";
 import { Appointment } from "../models/appointmentSchema.js";
 import LoginHistory from "../models/loginHistorySchema.js";
-import { generateOTP } from "../utils/otp.js";
-import { redis } from "../config/redis.js";
-import { sendEmail } from "../utils/mailer.js";
 
 // Get login history (admin only) with pagination and filters
 export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
@@ -17,14 +15,29 @@ export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
 
   const { role, action, userId, startDate, endDate } = req.query;
 
+  // validate userId if provided
+  if (userId && !mongoose.Types.ObjectId.isValid(userId)) {
+    return next(new ErrorHandler("Invalid userId", 400));
+  }
+
   const filter = {};
-  if (role) { filter.role = role; } // Admin or Doctor
-  if (action) { filter.action = action; } // login or logout
-  if (userId) { filter.userId = userId; }
+  if (role) {
+    filter.role = role;
+  } // Admin or Doctor
+  if (action) {
+    filter.action = action;
+  } // login or logout
+  if (userId) {
+    filter.userId = userId;
+  }
   if (startDate || endDate) {
     filter.timestamp = {};
-    if (startDate) { filter.timestamp.$gte = new Date(startDate); }
-    if (endDate) { filter.timestamp.$lte = new Date(endDate); }
+    if (startDate) {
+      filter.timestamp.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      filter.timestamp.$lte = new Date(endDate);
+    }
   }
 
   const [total, items] = await Promise.all([
@@ -33,7 +46,7 @@ export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit)
-      .populate({ path: 'userId', select: 'firstName lastName email role' }),
+      .populate({ path: "userId", select: "firstName lastName email role" }),
   ]);
 
   res.status(200).json({
@@ -50,38 +63,163 @@ export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
 // Response contains two arrays:
 // - latest: latest 10 loginHistory entries
 // - all: paginated full loginHistory entries for that user
-export const getLoginHistoryByUserId = catchAsyncErrors(async (req, res, next) => {
-  const { id } = req.params;
-  // Authorization: Admin can view any, Doctor can view only their own
-  if (req.user.role === "Doctor" && req.user._id.toString() !== id) {
-    return next(new ErrorHandler("Unauthorized: doctors can only access their own history", 403));
+export const getLoginHistoryByUserId = catchAsyncErrors(
+  async (req, res, next) => {
+    const { id } = req.params;
+
+    // validate id format first to avoid Mongoose CastError
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return next(new ErrorHandler("Invalid user id", 400));
+    }
+    // Authorization: Admin can view any, Doctor can view only their own
+    if (req.user.role === "Doctor" && req.user._id.toString() !== id) {
+      return next(
+        new ErrorHandler(
+          "Unauthorized: doctors can only access their own history",
+          403
+        )
+      );
+    }
+
+    const user = await User.findById(id).select(
+      "firstName lastName email role doctorDepartment docAvatar"
+    );
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    // latest 10
+    const latest = await LoginHistory.find({ userId: id })
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .populate({
+        path: "userId",
+        select: "firstName lastName email role doctorDepartment docAvatar",
+      });
+
+    // all (paginated)
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 100;
+    const skip = (page - 1) * limit;
+    const total = await LoginHistory.countDocuments({ userId: id });
+    const all = await LoginHistory.find({ userId: id })
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: "userId",
+        select: "firstName lastName email role doctorDepartment docAvatar",
+      });
+
+    res.status(200).json({
+      success: true,
+      user,
+      latest,
+      all,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+);
+
+// Get login history for the currently authenticated admin/doctor
+// Returns latest 10 and paginated all entries for the logged-in user
+export const getMyLoginHistory = catchAsyncErrors(async (req, res, next) => {
+  // req.user is set by isAdminOrDoctorAuthenticated middleware
+  const userId = req.user && req.user._id;
+  if (!userId) {
+    return next(new ErrorHandler("Authenticated user not found", 401));
   }
 
-  const user = await User.findById(id).select("firstName lastName email role doctorDepartment docAvatar");
-  if (!user) {
-    return next(new ErrorHandler("User not found", 404));
+  // Optional date/time filtering from request body
+  // Accepts ISO 8601 strings for any of: startDate, endDate, startTime, endTime
+  // Priority: if startTime/endTime provided, use them; otherwise use startDate/endDate.
+  const { startDate, endDate, startTime, endTime } = req.body || {};
+  const timestampFilter = {};
+
+  const tryParseDate = (val) => {
+    if (!val) {
+      return null;
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  // prefer time-based filters if present
+  const parsedStartTime = tryParseDate(startTime);
+  const parsedEndTime = tryParseDate(endTime);
+  if (startTime || endTime) {
+    if (startTime && !parsedStartTime) {
+      return next(new ErrorHandler("Invalid startTime format. Use ISO 8601.", 400));
+    }
+    if (endTime && !parsedEndTime) {
+      return next(new ErrorHandler("Invalid endTime format. Use ISO 8601.", 400));
+    }
+    if (parsedStartTime) {
+      timestampFilter.$gte = parsedStartTime;
+    }
+    if (parsedEndTime) {
+      timestampFilter.$lte = parsedEndTime;
+    }
+  } else {
+    const parsedStartDate = tryParseDate(startDate);
+    const parsedEndDate = tryParseDate(endDate);
+    if (startDate && !parsedStartDate) {
+      return next(new ErrorHandler("Invalid startDate format. Use ISO 8601.", 400));
+    }
+    if (endDate && !parsedEndDate) {
+      return next(new ErrorHandler("Invalid endDate format. Use ISO 8601.", 400));
+    }
+    if (parsedStartDate) {
+      timestampFilter.$gte = parsedStartDate;
+    }
+    if (parsedEndDate) {
+      timestampFilter.$lte = parsedEndDate;
+    }
   }
 
-  // latest 10
-  const latest = await LoginHistory.find({ userId: id })
+  const baseFilter = { userId };
+  if (Object.keys(timestampFilter).length) {
+    baseFilter.timestamp = timestampFilter;
+  }
+
+  // latest 10 (apply same filter)
+  const latest = await LoginHistory.find(baseFilter)
     .sort({ timestamp: -1 })
     .limit(10)
-    .populate({ path: 'userId', select: 'firstName lastName email role doctorDepartment docAvatar' });
+    .populate({
+      path: "userId",
+      select: "firstName lastName email role doctorDepartment docAvatar",
+    });
 
   // all (paginated)
-  const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 100;
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500); // cap to 500
   const skip = (page - 1) * limit;
-  const total = await LoginHistory.countDocuments({ userId: id });
-  const all = await LoginHistory.find({ userId: id })
+
+  const total = await LoginHistory.countDocuments(baseFilter);
+  const all = await LoginHistory.find(baseFilter)
     .sort({ timestamp: -1 })
     .skip(skip)
     .limit(limit)
-    .populate({ path: 'userId', select: 'firstName lastName email role doctorDepartment docAvatar' });
+    .populate({
+      path: "userId",
+      select: "firstName lastName email role doctorDepartment docAvatar",
+    });
 
   res.status(200).json({
     success: true,
-    user,
+    user: {
+      _id: req.user._id,
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      email: req.user.email,
+      role: req.user.role,
+      doctorDepartment: req.user.doctorDepartment,
+      docAvatar: req.user.docAvatar,
+    },
     latest,
     all,
     page,
@@ -127,23 +265,18 @@ export const patientRegister = catchAsyncErrors(async (req, res, next) => {
   generateToken(user, "User Registered!", 200, res);
 });
 
-
 export const login = catchAsyncErrors(async (req, res, next) => {
   const { email, password, confirmPassword, role } = req.body;
-
-  console.log("Login attempt:", { email, role, passwordProvided: !!password, confirmPasswordProvided: !!confirmPassword });
-  console.log("Request Body:", req.body);
-
 
   if (!email || !password || !confirmPassword || !role) {
     return next(new ErrorHandler("Please Fill Full Form!", 400));
   }
 
-
   if (password !== confirmPassword) {
-    return next(new ErrorHandler("Password & Confirm Password Do Not Match!", 400));
+    return next(
+      new ErrorHandler("Password & Confirm Password Do Not Match!", 400)
+    );
   }
-
 
   const user = await User.findOne({ email }).select("+password");
   console.log("User found:", user);
@@ -152,14 +285,11 @@ export const login = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
   }
 
-
   if (role !== user.role) {
     return next(new ErrorHandler(`User Not Found With This Role!`, 400));
   }
 
-
   const isPasswordMatch = await user.comparePassword(password);
-  console.log("Password match:", isPasswordMatch);
   if (!isPasswordMatch) {
     return next(new ErrorHandler("Invalid Email Or Password!", 400));
   }
@@ -181,7 +311,6 @@ export const login = catchAsyncErrors(async (req, res, next) => {
 
   generateToken(user, "Login Successfully!", 201, res);
 });
-
 
 // addmin section
 export const addNewAdmin = catchAsyncErrors(async (req, res, next) => {
@@ -677,6 +806,7 @@ export const getAllPatients = catchAsyncErrors(async (req, res, next) => {
 
 
 // get patient details by only dr.
+
 export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, next) => {
   try {
     const doctorId = req.user._id; // Assuming the doctor is logged in and their ID is in req.user
@@ -697,61 +827,82 @@ export const getPatientsWithAppointments = catchAsyncErrors(async (req, res, nex
 
 
 
-    // Get patients who have appointments with this doctor
-    const aggregationPipeline = [
-      {
-        $match: {
+      // Get patients who have appointments with this doctor
+      const aggregationPipeline = [
+        {
+          $match: {
+            role: "Patient",
+            // Only patients who have appointments with this doctor
+            _id: {
+              $in: await Appointment.distinct("patientId", {
+                doctorId: doctorId,
+              }),
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "appointments",
+            let: { patientId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$patientId", "$$patientId"] },
+                      { $eq: ["$doctorId", doctorId] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "appointmentsWithDoctor",
+          },
+        },
+        {
+          $addFields: {
+            appointmentCount: { $size: "$appointmentsWithDoctor" },
+          },
+        },
+        {
+          $project: {
+            password: 0,
+            __v: 0,
+            appointmentsWithDoctor: 0, // Remove the appointments array after counting
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      // Get both paginated results and total count
+      const [patients, totalCount] = await Promise.all([
+        User.aggregate(aggregationPipeline),
+        User.countDocuments({
           role: "Patient",
-          // Only patients who have appointments with this doctor
           _id: {
-            $in: await Appointment.distinct("patientId", { doctorId: doctorId })
-          }
-        }
-      },
-      {
-        $lookup: {
-          from: "appointments",
-          let: { patientId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$patientId", "$$patientId"] },
-                    { $eq: ["$doctorId", doctorId] }
-                  ]
-                }
-              }
-            }
-          ],
-          as: "appointmentsWithDoctor"
-        }
-      },
-      {
-        $addFields: {
-          appointmentCount: { $size: "$appointmentsWithDoctor" },
-        },
-      },
-      {
-        $project: {
-          password: 0,
-          __v: 0,
-          appointmentsWithDoctor: 0, // Remove the appointments array after counting
-        },
-      },
-      { $skip: skip },
-      { $limit: limit }
-    ];
+            $in: await Appointment.distinct("patientId", {
+              doctorId: doctorId,
+            }),
+          },
+        }),
+      ]);
 
-    // Get both paginated results and total count
-    const [patients, totalCount] = await Promise.all([
-      User.aggregate(aggregationPipeline),
-      User.countDocuments({
-        role: "Patient",
-        _id: { $in: await Appointment.distinct("patientId", { doctorId: doctorId }) }
-      })
-    ]);
-
+      res.status(200).json({
+        success: true,
+        count: patients.length,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        currentPage: page,
+        patients,
+      });
+    } catch (error) {
+      return next(
+        new ErrorHandler("Error fetching patients with appointments", 500)
+      );
+    }
+  }
+);
     const responseData = {
       count: patients.length,
       totalCount,
@@ -864,11 +1015,16 @@ export const deleteDoctor = catchAsyncErrors(async (req, res, next) => {
   const doctor = await User.findOne({
     _id: id,
     role: "Doctor",
-    createdBy: req.user._id  // Only find doctors created by this admin
+    createdBy: req.user._id, // Only find doctors created by this admin
   });
 
   if (!doctor) {
-    return next(new ErrorHandler("Doctor not found or you don't have permission to delete this doctor", 404));
+    return next(
+      new ErrorHandler(
+        "Doctor not found or you don't have permission to delete this doctor",
+        404
+      )
+    );
   }
 
   // Delete the doctor
@@ -993,11 +1149,13 @@ export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   if (email && email !== admin.email) {
     const emailExists = await User.findOne({
       email: email,
-      _id: { $ne: req.user._id } // Exclude the current admin
+      _id: { $ne: req.user._id }, // Exclude the current admin
     });
 
     if (emailExists) {
-      return next(new ErrorHandler("Email is already registered by another user!", 400));
+      return next(
+        new ErrorHandler("Email is already registered by another user!", 400)
+      );
     }
   }
 
@@ -1008,7 +1166,6 @@ export const updateAdminProfile = catchAsyncErrors(async (req, res, next) => {
   admin.nic = nic || admin.nic;
   admin.dob = dob || admin.dob;
   admin.gender = gender || admin.gender;
-
 
   await admin.save();
 
@@ -1029,11 +1186,13 @@ export const updatePatientProfile = catchAsyncErrors(async (req, res, next) => {
   if (email && email !== patient.email) {
     const emailExists = await User.findOne({
       email: email,
-      _id: { $ne: req.user._id } // Exclude the current patient
+      _id: { $ne: req.user._id }, // Exclude the current patient
     });
 
     if (emailExists) {
-      return next(new ErrorHandler("Email is already registered by another user!", 400));
+      return next(
+        new ErrorHandler("Email is already registered by another user!", 400)
+      );
     }
   }
 
@@ -1074,11 +1233,13 @@ export const updateDoctorProfile = catchAsyncErrors(async (req, res, next) => {
   if (email && email !== doctor.email) {
     const emailExists = await User.findOne({
       email: email,
-      _id: { $ne: req.user._id } // Exclude the current doctor
+      _id: { $ne: req.user._id }, // Exclude the current doctor
     });
 
     if (emailExists) {
-      return next(new ErrorHandler("Email is already registered by another user!", 400));
+      return next(
+        new ErrorHandler("Email is already registered by another user!", 400)
+      );
     }
   }
 

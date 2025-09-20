@@ -16,10 +16,11 @@ import {
   logoutPatient,
   patientRegister,
   getPatientsWithAppointments,
-  forgotPassword,
-  resetPassword,
   getLoginHistory,
   getLoginHistoryByUserId,
+  getMyLoginHistory,
+  forgotPassword,
+  resetPassword,
 } from "../controller/userController.js";
 import {
   isAdminAuthenticated,
@@ -36,6 +37,7 @@ router.get("/login-history", isAdminAuthenticated, getLoginHistory);
 router.get("/login-history/:id", isAdminOrDoctorAuthenticated, getLoginHistoryByUserId);
 router.post("/forgot/password", forgotPassword);                                                           //            ->redis req                  
 router.post("/reset/password", isPatientAuthenticated, resetPassword);                                     //            ->redis req
+router.get("/my/login-history", isPatientAuthenticated, getMyLoginHistory);
 
 // 🔹 Patient APIs
 router.post("/patient/register", patientRegister);
