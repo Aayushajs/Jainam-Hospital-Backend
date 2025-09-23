@@ -6,6 +6,7 @@ import cloudinary from "cloudinary";
 import mongoose from "mongoose";
 import { Appointment } from "../models/appointmentSchema.js";
 import LoginHistory from "../models/loginHistorySchema.js";
+import { redis } from "../server.js";
 
 // Get login history (admin only) with pagination and filters
 export const getLoginHistory = catchAsyncErrors(async (req, res, next) => {
